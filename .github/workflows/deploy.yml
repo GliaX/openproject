@@ -25,7 +25,7 @@ jobs:
           token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
 
       - name: Fetch kubeconfig
-        run: doctl kubernetes cluster kubeconfig save do-tor1-k8s-glia1
+        run: doctl kubernetes cluster kubeconfig save k8s-glia1
 
       - name: Reconcile app secret from GitHub secrets
         run: |
