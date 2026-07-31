@@ -45,7 +45,16 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.secretName }}
                   key: DATABASE_URL
+            # OpenProject reads OPENPROJECT_SECRET_KEY_BASE for cookie/session
+            # signing; 17.6+ also refuses to boot if the raw SECRET_KEY_BASE is
+            # still the image default ("OVERWRITE_ME"), so set both to the real
+            # value from the Secret.
             - name: OPENPROJECT_SECRET_KEY_BASE
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secretName }}
+                  key: SECRET_KEY_BASE
+            - name: SECRET_KEY_BASE
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.secretName }}
