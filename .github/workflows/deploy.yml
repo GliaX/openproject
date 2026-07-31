@@ -46,4 +46,4 @@ jobs:
         run: |
           helm upgrade --install openproject . \
             --namespace openproject --create-namespace \
-            --atomic --timeout 5m
+            --atomic --timeout 10m

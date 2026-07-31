@@ -5,6 +5,10 @@ Chart.lock
 # Local secret overlays (real secrets live in GitHub Actions secrets)
 values.secret.yaml
 
+# Local backups (take them OUTSIDE the chart dir — Helm won't package
+# files >5MB, and binaries don't belong in git anyway)
+backups/
+
 # OS / editor noise
 .DS_Store
 *.swp
