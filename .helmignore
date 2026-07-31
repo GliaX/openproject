@@ -1,0 +1,20 @@
+# Helm packaging ignore file. Without this, helm packages EVERYTHING in the
+# chart dir (including .git/), which breaks when git objects exceed 5MB.
+.git/
+.gitignore
+.github/
+
+# Helm build artefacts
+charts/
+Chart.lock
+*.tgz
+
+# Local backups / secrets (never package)
+backups/
+values.secret.yaml
+
+# Editor / OS noise
+*.swp
+.DS_Store
+.idea/
+.vscode/
