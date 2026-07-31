@@ -1,0 +1,106 @@
+# Glia OpenProject configuration — SECRET-FREE (verified).
+#
+# Secrets are NOT stored here. They live in GitHub Actions secrets and are
+# materialised as the `openproject-secrets` Kubernetes Secret by the deploy
+# workflow (.github/workflows/deploy.yml). See values.secret.example.yaml for
+# the secret shape and README.md for the full secret list.
+
+# The deployment targets the `openproject` namespace (created on install).
+namespace: openproject
+
+image:
+  # Custom image bundling the openproject-meeting_markdown_export plugin on top
+  # of the upstream all-in-one image. See Dockerfile + build-image.yml.
+  repository: ghcr.io/gliax/openproject
+  tag: "17.0.4"
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+# OpenProject's all-in-one image runs web+worker+scheduler under one supervisord
+# process; scale horizontally by running more replicas each backed by their own
+# assets PVC only after switching attachments storage to a shared (RWX) backend.
+
+# Pod placement: the assets PVC is ReadWriteOnce (DigitalOcean block storage),
+# so it can attach to a single node. Pin the pod to that node and keep
+# replicaCount=1 to avoid Multi-Attach errors during rollouts (same lesson as
+# GliaX/helm-erpnext). Switch the PVC to RWX to lift this.
+nodeSelector:
+  kubernetes.io/hostname: pool-f971mwbjk-372vs6
+
+openproject:
+  # Public host served by the Ingress.
+  hostName: project.glia.org
+  edition: standard
+  # Attachments live on the assets PVC.
+  attachmentsStoragePath: /var/openproject/assets/files
+  # Preserve the previous Docker deployment's cache setting. NOTE: set to
+  # "memcache" historically but no memcache server is deployed, so the cache
+  # effectively no-ops / falls back. Switch to "file_store" (the upstream
+  # default) if you want on-disk caching without extra components.
+  railsCacheStore: memcache
+  angularUglify: true
+  collaborativeEditing:
+    hocuspocusUrl: auto
+    hocuspocusSecret: ""
+
+# Name of the Kubernetes Secret (in the release namespace) that holds the
+# sensitive values. Created out-of-band by the deploy workflow from GitHub
+# Actions secrets, so this chart never touches plaintext secrets.
+secretName: openproject-secrets
+
+persistence:
+  assets:
+    enabled: true
+    # Current usage ~38 Mi; 10 Gi gives ample headroom for uploaded files.
+    size: 10Gi
+    storageClass: do-block-storage
+    accessMode: ReadWriteOnce
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  host: project.glia.org
+  tls:
+    enabled: true
+    secretName: project.glia.org-tls
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    memory: 2Gi
+
+# Probe the all-in-one web frontend (apache -> rails on :80).
+#
+# OpenProject validates the HTTP Host header (allowed hosts come from
+# OPENPROJECT_HOST__NAME). A bare probe to the pod IP gets HTTP 400, so the
+# probe must send the real vhost Host header — Kubernetes supports this via
+# httpHeaders (this is the documented pattern for vhost-based apps).
+probes:
+  readiness:
+    httpGet:
+      path: /
+      port: 80
+      httpHeaders:
+        - name: Host
+          value: project.glia.org
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    failureThreshold: 24
+  liveness:
+    httpGet:
+      path: /
+      port: 80
+      httpHeaders:
+        - name: Host
+          value: project.glia.org
+    initialDelaySeconds: 240
+    periodSeconds: 30
+    failureThreshold: 6

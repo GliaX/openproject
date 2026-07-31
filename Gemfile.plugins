@@ -1,0 +1,5 @@
+group :opf_plugins do
+  gem "openproject-meeting_markdown_export",
+      git: "https://github.com/tareko/openproject-markdown-exporter.git",
+      branch: "main"
+end

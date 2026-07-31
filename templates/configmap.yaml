@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "openproject.fullname" . }}
+  namespace: {{ include "openproject.namespace" . }}
+  labels:
+    {{- include "openproject.labels" . | nindent 4 }}
+data:
+  # Non-sensitive OpenProject configuration. Env names use the OpenProject
+  # double-underscore convention (OPENPROJECT_<GROUP>__<KEY>).
+  OPENPROJECT_HOST__NAME: {{ .Values.openproject.hostName | quote }}
+  OPENPROJECT_EDITION: {{ .Values.openproject.edition | quote }}
+  OPENPROJECT_ATTACHMENTS__STORAGE__PATH: {{ .Values.openproject.attachmentsStoragePath | quote }}
+  OPENPROJECT_RAILS__CACHE__STORE: {{ .Values.openproject.railsCacheStore | quote }}
+  OPENPROJECT_ANGULAR_UGLIFY: {{ .Values.openproject.angularUglify | quote }}
+  OPENPROJECT_COLLABORATIVE__EDITING__HOCUSPOCUS__URL: {{ .Values.openproject.collaborativeEditing.hocuspocusUrl | quote }}
+  OPENPROJECT_COLLABORATIVE__EDITING__HOCUSPOCUS__SECRET: {{ .Values.openproject.collaborativeEditing.hocuspocusSecret | quote }}

@@ -1,0 +1,49 @@
+name: deploy
+
+# Deploy (or upgrade) OpenProject into the `openproject` namespace of the Glia
+# DOKS cluster. Secrets are sourced from GitHub Actions secrets (the repo is
+# public) and reconciled into the `openproject-secrets` Kubernetes Secret, so
+# no plaintext secret ever lives in git.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+
+      - uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Fetch kubeconfig
+        run: doctl kubernetes cluster kubeconfig save do-tor1-k8s-glia1
+
+      - name: Reconcile app secret from GitHub secrets
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/sec
+          printf '%s' "$ENTERPRISE_TOKEN_RB" > /tmp/sec/enterprise_token.rb
+          kubectl -n openproject create secret generic openproject-secrets \
+            --from-literal=DATABASE_URL="$DATABASE_URL" \
+            --from-literal=SECRET_KEY_BASE="$SECRET_KEY_BASE" \
+            --from-file=enterprise_token.rb=/tmp/sec/enterprise_token.rb \
+            --dry-run=client -o yaml | kubectl apply -f -
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SECRET_KEY_BASE: ${{ secrets.SECRET_KEY_BASE }}
+          ENTERPRISE_TOKEN_RB: ${{ secrets.ENTERPRISE_TOKEN_RB }}
+
+      - name: Helm deploy
+        run: |
+          helm upgrade --install openproject . \
+            --namespace openproject --create-namespace \
+            --atomic --timeout 5m

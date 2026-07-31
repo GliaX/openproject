@@ -1,0 +1,14 @@
+apiVersion: v2
+name: openproject
+description: Glia OpenProject (project.glia.org) deployment as Helm-as-Code
+type: application
+# Chart version (bump on chart changes); appVersion tracks OpenProject.
+version: 0.1.0
+appVersion: "17.0.4"
+keywords:
+  - openproject
+  - project-management
+  - glia
+home: https://github.com/GliaX/openproject
+maintainers:
+  - name: GliaX

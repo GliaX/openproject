@@ -1,0 +1,5 @@
+# Keep the build context lean — only what the Dockerfile needs.
+*
+!Dockerfile
+!Gemfile.plugins
+!Gemfile.lock

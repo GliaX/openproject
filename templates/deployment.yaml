@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "openproject.fullname" . }}
+  namespace: {{ include "openproject.namespace" . }}
+  labels:
+    {{- include "openproject.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "openproject.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "openproject.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: openproject
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "openproject.fullname" . }}
+          env:
+            # Sensitive values come from the externally-managed Secret.
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secretName }}
+                  key: DATABASE_URL
+            - name: OPENPROJECT_SECRET_KEY_BASE
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secretName }}
+                  key: SECRET_KEY_BASE
+          {{- with .Values.probes.readiness }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.probes.liveness }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            {{- if .Values.persistence.assets.enabled }}
+            - name: assets
+              mountPath: /var/openproject/assets
+            {{- end }}
+            # Overlay the enterprise feature shim onto the image's model file.
+            # Mounted read-only via subPath so only this single file is replaced.
+            - name: enterprise-token
+              mountPath: /app/app/models/enterprise_token.rb
+              subPath: enterprise_token.rb
+              readOnly: true
+      volumes:
+        {{- if .Values.persistence.assets.enabled }}
+        - name: assets
+          persistentVolumeClaim:
+            claimName: {{ include "openproject.fullname" . }}-assets
+        {{- end }}
+        - name: enterprise-token
+          secret:
+            secretName: {{ .Values.secretName }}
+            items:
+              - key: enterprise_token.rb
+                path: enterprise_token.rb

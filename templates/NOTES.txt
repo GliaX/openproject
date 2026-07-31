@@ -1,0 +1,16 @@
+OpenProject {{ .Chart.AppVersion }} has been deployed in namespace {{ include "openproject.namespace" . }}.
+
+Release: {{ .Release.Name }}
+
+The pod waits on the `{{ .Values.secretName }}` Secret, which the deploy
+workflow creates from GitHub Actions secrets. Until it exists the pod stays in
+`CreateContainerConfigError` / `CreateContainerError`.
+
+Next steps:
+  1. Ensure the Secret exists:
+       kubectl -n {{ include "openproject.namespace" . }} get secret {{ .Values.secretName }}
+  2. Check rollout:
+       kubectl -n {{ include "openproject.namespace" . }} rollout status deploy/{{ include "openproject.fullname" . }}
+  3. TLS (cert-manager / letsencrypt-prod) only issues once the
+     project.glia.org DNS record points at the cluster's ingress LB
+     (office.emlondon.ca). Until then the Ingress shows a missing cert.
