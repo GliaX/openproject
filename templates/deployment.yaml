@@ -7,6 +7,14 @@ metadata:
     {{- include "openproject.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
+  # Recreate (not RollingUpdate): the assets PVC is ReadWriteOnce and pinned to
+  # one node, and the all-in-one image is memory-heavy, so a rolling update
+  # would try to run two pods on that node at once and fail scheduling
+  # (Insufficient memory / Multi-Attach). Recreate kills the old pod first,
+  # freeing memory and releasing the PVC, then starts the new one. There is
+  # brief downtime during upgrades — acceptable for a single-replica app.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       {{- include "openproject.selectorLabels" . | nindent 6 }}
