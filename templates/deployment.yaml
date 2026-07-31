@@ -86,7 +86,7 @@ spec:
         {{- if .Values.persistence.assets.enabled }}
         - name: assets
           persistentVolumeClaim:
-            claimName: {{ include "openproject.fullname" . }}-assets
+            claimName: {{ .Values.persistence.assets.existingClaim | default (printf "%s-assets" (include "openproject.fullname" .)) }}
         {{- end }}
         - name: enterprise-token
           secret:

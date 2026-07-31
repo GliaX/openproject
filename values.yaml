@@ -51,6 +51,12 @@ secretName: openproject-secrets
 persistence:
   assets:
     enabled: true
+    # Reuse a pre-existing PVC instead of creating one (e.g. when reinstalling
+    # the release while retaining the assets volume). The assets PVC is
+    # retained across `helm uninstall` (see pvc.yaml), so it already exists and
+    # is referenced here. For a brand-new install with no existing volume, set
+    # this to empty / remove it so the chart creates one.
+    existingClaim: openproject-assets
     # Current usage ~38 Mi; 10 Gi gives ample headroom for uploaded files.
     size: 10Gi
     storageClass: do-block-storage
