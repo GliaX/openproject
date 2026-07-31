@@ -2,6 +2,11 @@
 
 Infrastructure-as-code for Glia's OpenProject deployment at **`project.glia.org`**.
 
+> **Upgrading or troubleshooting?** Read **[OPERATIONS.md](OPERATIONS.md)** first — it has the
+> architecture, the upgrade runbook, and the non-obvious gotchas of this setup
+> (root user, SECRET_KEY_BASE check, probe Host header, ssl-redirect, Recreate
+> strategy, helm recovery, etc.).
+
 This repo packages OpenProject as a thin local Helm chart (Helm-as-Code,
 matching `GliaX/helm-erpnext`) and ships a CI pipeline that deploys it to the
 Glia DigitalOcean Kubernetes (DOKS) cluster. **Secrets live in GitHub Actions
