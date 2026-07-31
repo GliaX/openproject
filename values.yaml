@@ -76,11 +76,14 @@ ingress:
     secretName: project.glia.org-tls
 
 resources:
+  # The all-in-one image runs puma + GoodJob (20 threads) + hocuspocus +
+  # memcached + apache under one container, so it is memory-hungry. The original
+  # Docker deployment ran with no memory limit; 2Gi caused OOMKills under load.
   requests:
     cpu: 250m
-    memory: 512Mi
+    memory: 1Gi
   limits:
-    memory: 2Gi
+    memory: 4Gi
 
 # Probe the all-in-one web frontend (apache -> rails on :80).
 #
