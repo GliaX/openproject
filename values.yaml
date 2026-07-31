@@ -12,7 +12,7 @@ image:
   # Custom image bundling the openproject-meeting_markdown_export plugin on top
   # of the upstream all-in-one image. See Dockerfile + build-image.yml.
   repository: ghcr.io/gliax/openproject
-  tag: "17.0.4"
+  tag: "17.6.0"
   pullPolicy: IfNotPresent
 
 replicaCount: 1

@@ -4,7 +4,7 @@ description: Glia OpenProject (project.glia.org) deployment as Helm-as-Code
 type: application
 # Chart version (bump on chart changes); appVersion tracks OpenProject.
 version: 0.1.0
-appVersion: "17.0.4"
+appVersion: "17.6.0"
 keywords:
   - openproject
   - project-management

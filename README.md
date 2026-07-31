@@ -10,7 +10,7 @@ secrets** — the repo is intentionally public and contains no plaintext secrets
 | | |
 |---|---|
 | **Release / namespace** | `openproject` / `openproject` |
-| **App version (image)** | OpenProject **17.0.4** (`ghcr.io/gliax/openproject:17.0.4`) |
+| **App version (image)** | OpenProject **17.6.0** (`ghcr.io/gliax/openproject:17.6.0`) |
 | **Site** | `project.glia.org` |
 | **Cluster** | DOKS `do-tor1-k8s-glia1` (ingress `nginx`, issuer `letsencrypt-prod`) |
 | **Database** | DigitalOcean managed PostgreSQL (external `DATABASE_URL`) |
@@ -95,8 +95,13 @@ kubectl -n openproject get certificate
 ## Image build & version drift
 
 `build-image.yml` rebuilds `ghcr.io/gliax/openproject` from `Dockerfile`
-(upstream `:17` + the plugin). The upstream `:17` tag is **moving**, so a
-rebuild produces the latest 17.x — an effective OpenProject upgrade (the app
-auto-runs `db:migrate` on boot). The image currently deployed (`:17.0.4`) was
-imported from the prior Docker-host build to preserve the exact running
-version. Run a rebuild deliberately, after taking a DB backup.
+(upstream `openproject/openproject:<ver>` + the plugin). The `FROM` tag is
+**pinned** to a specific OpenProject release, and the build converges on the
+upstream image's own `Gemfile.lock` (no lockfile is shipped in this repo), so
+rails stays at the version OpenProject supports (e.g. 17.6.0 → rails 8.1.3).
+
+To upgrade: bump the `FROM` tag in `Dockerfile`, `appVersion` in `Chart.yaml`,
+and `image.tag` in `values.yaml` to the new OpenProject version, run the
+`build-image.yml` workflow (or build locally with `write:packages`), and push.
+The pod auto-runs `db:migrate` on boot. Always take a DB backup first
+(see Backups).

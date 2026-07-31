@@ -1,5 +1,7 @@
 # Keep the build context lean — only what the Dockerfile needs.
+# (Gemfile.lock is intentionally NOT shipped: the build converges on the
+#  upstream image's own lockfile so rails stays at the OpenProject-supported
+#  version instead of re-resolving to latest.)
 *
 !Dockerfile
 !Gemfile.plugins
-!Gemfile.lock

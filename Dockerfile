@@ -1,13 +1,11 @@
 # Custom OpenProject image = upstream all-in-one + the
 # openproject-meeting_markdown_export plugin.
 #
-# This mirrors the prior Docker-host build: FROM the moving upstream :17 tag and
-# `bundle install` the plugin Gemfile. Because BUNDLE_FROZEN is off, bundler
-# re-resolves dependencies, so a rebuild tracks the latest upstream 17.x gems.
-# The currently DEPLOYED image (ghcr.io/gliax/openproject:17.0.4) was imported
-# from the prior build to preserve the exact running version; rebuilds are an
-# explicit upgrade — see README.md "Image build & version drift".
-FROM openproject/openproject:17
+# We layer the plugin onto the PINNED upstream image and `bundle install`
+# against the upstream Gemfile.lock (kept in the image, NOT shipped here).
+# Bundler converges on the locked versions and only adds the plugin, so rails
+# stays at the OpenProject-supported 8.0.x instead of jumping to 8.1.x.
+FROM openproject/openproject:17.6.0
 
 # The published runtime image ships no compiler; re-add just enough to build the
 # extra gem (matches upstream docker/prod/setup/preinstall-common.sh).
@@ -18,9 +16,10 @@ RUN apt-get update -qq \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY --chown=app:app Gemfile.plugins Gemfile.lock /app/
+COPY --chown=app:app Gemfile.plugins /app/Gemfile.plugins
 
 USER app
+# Add the plugin on top of the upstream lockfile (converge, don't re-resolve).
 RUN bundle config set frozen false \
  && bundle config set without 'development test' \
  && bundle install --jobs 4 \
