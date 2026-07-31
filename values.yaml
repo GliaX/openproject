@@ -65,6 +65,11 @@ ingress:
   className: nginx
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt-prod
+    # Disable ingress-level HTTP→HTTPS redirect. cert-manager's HTTP-01
+    # challenge arrives over plain HTTP and would otherwise be 308'd to HTTPS
+    # (where no cert exists yet) and fail. OpenProject still enforces HTTPS at
+    # the application layer when X-Forwarded-Proto is set by the proxy/LB.
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
   host: project.glia.org
   tls:
     enabled: true
