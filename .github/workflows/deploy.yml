@@ -10,6 +10,12 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Only one deploy at a time — concurrent helm upgrades race and leave the
+# release in a stuck "another operation is in progress" state.
+concurrency:
+  group: deploy-openproject
+  cancel-in-progress: true
+
 jobs:
   deploy:
     runs-on: ubuntu-latest

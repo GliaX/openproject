@@ -6,6 +6,10 @@ metadata:
   namespace: {{ include "openproject.namespace" . }}
   labels:
     {{- include "openproject.labels" . | nindent 4 }}
+  annotations:
+    # Keep the assets PVC across `helm uninstall` so uploaded files are never
+    # lost. The PVC is also bound to a single node (RWO) and may hold user data.
+    helm.sh/resource-policy: keep
 spec:
   accessModes:
     - {{ .Values.persistence.assets.accessMode | quote }}

@@ -13,7 +13,7 @@ image:
   # of the upstream all-in-one image. See Dockerfile + build-image.yml.
   repository: ghcr.io/gliax/openproject
   tag: "17.6.0"
-  pullPolicy: IfNotPresent
+  pullPolicy: Always
 
 replicaCount: 1
 # OpenProject's all-in-one image runs web+worker+scheduler under one supervisord

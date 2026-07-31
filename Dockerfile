@@ -24,3 +24,8 @@ RUN bundle config set frozen false \
  && bundle config set without 'development test' \
  && bundle install --jobs 4 \
  && bundle config set frozen true
+
+# Restore the all-in-one image's runtime user (root). The entrypoint runs
+# supervisord as root and checks the external DB via `su postgres -c psql ...`;
+# leaving USER=app (set above for bundle install) makes that fail.
+USER root
