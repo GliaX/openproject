@@ -13,5 +13,11 @@ data:
   OPENPROJECT_ATTACHMENTS__STORAGE__PATH: {{ .Values.openproject.attachmentsStoragePath | quote }}
   OPENPROJECT_RAILS__CACHE__STORE: {{ .Values.openproject.railsCacheStore | quote }}
   OPENPROJECT_ANGULAR_UGLIFY: {{ .Values.openproject.angularUglify | quote }}
+  # Process sizing (memory). The all-in-one image defaults to 2 puma workers
+  # (~1GiB RSS each) and 20 GoodJob threads; both are oversized for this
+  # instance's traffic and drove the container into its memory limit.
+  # These are top-level (non-namespaced) OpenProject env vars.
+  OPENPROJECT_WEB_WORKERS: {{ .Values.openproject.webWorkers | quote }}
+  OPENPROJECT_GOOD_JOB_THREADS: {{ .Values.openproject.goodJobThreads | quote }}
   OPENPROJECT_COLLABORATIVE__EDITING__HOCUSPOCUS__URL: {{ .Values.openproject.collaborativeEditing.hocuspocusUrl | quote }}
   OPENPROJECT_COLLABORATIVE__EDITING__HOCUSPOCUS__SECRET: {{ .Values.openproject.collaborativeEditing.hocuspocusSecret | quote }}

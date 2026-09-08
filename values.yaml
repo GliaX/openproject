@@ -39,6 +39,10 @@ openproject:
   # default) if you want on-disk caching without extra components.
   railsCacheStore: memcache
   angularUglify: true
+  # Process sizing to keep the all-in-one container within its memory limit:
+  # 1 puma worker (vs default 2) and 5 GoodJob threads (vs default 20).
+  webWorkers: "1"
+  goodJobThreads: "5"
   collaborativeEditing:
     hocuspocusUrl: auto
     hocuspocusSecret: ""
@@ -87,9 +91,12 @@ resources:
   # Docker deployment ran with no memory limit; 2Gi caused OOMKills under load.
   requests:
     cpu: 250m
-    memory: 1Gi
+    memory: 2Gi
   limits:
-    memory: 4Gi
+    # Observed climbing to ~3Gi within 20 min of a fresh boot before being
+    # SIGKILLed (exit 137) 1-3x/day at the 4Gi limit, causing 502/503 outages.
+    # 8Gi gives the all-in-one image room to grow.
+    memory: 8Gi
 
 # Probe the all-in-one web frontend (apache -> rails on :80).
 #
