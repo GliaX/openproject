@@ -91,7 +91,9 @@ resources:
   # Docker deployment ran with no memory limit; 2Gi caused OOMKills under load.
   requests:
     cpu: 250m
-    memory: 2Gi
+    # Keep at 1Gi: the pinned node (8GB droplet) is already ~90% memory-
+    # requested; a 2Gi request fails scheduling (Insufficient memory).
+    memory: 1Gi
   limits:
     # Observed climbing to ~3Gi within 20 min of a fresh boot before being
     # SIGKILLed (exit 137) 1-3x/day at the 4Gi limit, causing 502/503 outages.
