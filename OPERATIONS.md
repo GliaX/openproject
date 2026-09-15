@@ -11,8 +11,12 @@ hard-won specifics of this setup that are not obvious from the chart alone.
   `openproject-meeting_markdown_export` plugin; rails 8.1.3, hocuspocus v4.2.0).
 - Deployed in namespace `openproject` on DOKS cluster **`k8s-glia1`**
   (kubeconfig context `do-tor1-k8s-glia1`).
-- Pod healthy at `replicas=1`, memory limit 4Gi, `strategy: Recreate`,
-  pinned to node `pool-f971mwbjk-372vs6`.
+- Pod healthy at `replicas=1`, `strategy: Recreate`, pinned to node
+  `pool-f971mwbjk-372vs6` with a memory-pressure **toleration** (rule 11).
+- Memory: request 1Gi / limit **8Gi** (node is only 8GB — see rule 5); puma
+  workers=1, GoodJob threads=5.
+- Attachments up to **100 MB** (ingress `proxy-body-size: 100m` + OpenProject
+  `attachment_max_size=102400` KB — rule 12).
 - TLS via cert-manager `letsencrypt-prod`, cert valid (renews automatically).
 
 ## Architecture at a glance
@@ -37,12 +41,14 @@ The all-in-one image runs **puma + GoodJob (20 threads) + hocuspocus + memcached
 2. **17.6+ aborts on the default `SECRET_KEY_BASE`.** The image ships `SECRET_KEY_BASE=OVERWRITE_ME`; OpenProject 17.6.0 refuses to boot if it's still that value. Set **both** `OPENPROJECT_SECRET_KEY_BASE` **and** the raw `SECRET_KEY_BASE` from the Secret (the check reads the raw one). Both already wired in `templates/deployment.yaml`.
 3. **Probes must send the Host header.** OpenProject validates the HTTP Host (from `OPENPROJECT_HOST__NAME`); a kubelet probe to the pod IP gets HTTP 400. `readinessProbe`/`livenessProbe` use `httpHeaders: [{name: Host, value: project.glia.org}]`.
 4. **Disable ingress ssl-redirect.** ingress-nginx's default ssl-redirect 308's the cert-manager HTTP-01 challenge (which arrives over plain HTTP) → TLS never issues. `nginx.ingress.kubernetes.io/ssl-redirect: "false"` (OpenProject still forces HTTPS at the app layer).
-5. **Memory: use ≥4Gi limit.** The all-in-one is memory-hungry; 2Gi ⇒ OOMKilled under load (the old Docker host had no limit).
+5. **Memory is the tightest constraint.** The all-in-one is memory-hungry (2Gi ⇒ OOMKilled). The limit is currently **8Gi** on an 8GB node, which overcommits the node and makes this pod the prime **eviction** victim (see rule 11). Puma workers=1 / GoodJob threads=5 (in `values.yaml`) trim the footprint. Right-sizing the limit is the real fix.
 6. **Use Deployment `strategy: Recreate`.** Single replica + RWO PVC: RollingUpdate tries two pods on the pinned node ⇒ `Insufficient memory` / Multi-Attach. Recreate kills the old pod first.
 7. **Pin the image tag + converge on the upstream lockfile.** `FROM openproject/openproject:<ver>` (pinned; the `:17` tag is moving). Do NOT ship a `Gemfile.lock` — `bundle install` converges on the image's own lockfile so rails stays at the OpenProject-supported version.
 8. **Keep `.helmignore`.** Helm has no default ignore; without it helm packages `.git/` and fails ("chart file … larger than 5242880") if any git object exceeds 5 MB.
 9. **No concurrent helm operations.** Concurrent deploys (CI + manual, or multiple pushes) corrupt the release ("another operation is in progress" / pending-rollback). `deploy.yml` has a `concurrency` group; never run a local `helm` command while CI is deploying.
 10. **Re-pushing the same tag won't re-pull.** With `IfNotPresent`, the node caches by tag. Either use a unique tag per build or `imagePullPolicy: Always` (currently `Always`).
+11. **Tolerate the memory-pressure taint.** This deployment is pinned to one node (RWO PVC). When that overcommitted node comes under memory pressure, kubelet taints it `node.kubernetes.io/memory-pressure` and the pod becomes **unschedulable → full outage**. The chart now tolerates that taint (`tolerations:` in `values.yaml`) so it can reschedule once pressure eases. The root fix is right-sizing memory (rule 5) — the node's pods' memory *limits* are overcommitted ~5x.
+12. **Attachment uploads are capped at two layers.** ingress-nginx `proxy-body-size` (**defaults to `1m`** — the usual "~1 MB" culprit) and OpenProject `attachment_max_size` (KB; image default 5120 = 5 MB). Both are currently **100 MB** (`100m` / `OPENPROJECT_ATTACHMENT_MAX_SIZE=102400`). A ConfigMap-only change reaches a running pod only via the `checksum/config` rollout annotation.
 
 ## Upgrading OpenProject
 
@@ -100,6 +106,10 @@ If it fails, `helm uninstall openproject` + `helm install openproject . -n openp
 | Certificate `Ready=False`, challenge `wrong status code '404'` | DNS still pointing at old host / not propagated | confirm `dig project.glia.org` = `159.203.50.191`; wait for TTL (3h) |
 | `UPGRADE FAILED: another operation … in progress` | concurrent/stuck helm op | see Recovery below |
 | `chart file … larger than the maximum file size 5242880` | missing `.helmignore`; big file in tree | keep `.helmignore`; never put backups/binaries in the chart dir |
+| Uploads fail at ~1 MB (HTTP 413) | ingress-nginx `client_max_body_size` defaults to `1m`; Ingress has no `proxy-body-size` | set `nginx.ingress.kubernetes.io/proxy-body-size: "100m"` (chart does) |
+| Uploads fail below the ingress limit | OpenProject `attachment_max_size` (KB) too low | set `OPENPROJECT_ATTACHMENT_MAX_SIZE` (KB) in the ConfigMap — `102400` = 100 MB |
+| New pod `Pending: … untolerated taint node.kubernetes.io/memory-pressure` | node memory overcommitted; kubelet tainted the (pinned) node | chart tolerates the taint (rule 11); **root fix is right-sizing pod memory** — limit is 8Gi on an 8GB node |
+| Config/env change has no effect after a deploy | a ConfigMap change doesn't alter the Deployment spec → no rollout | chart's `checksum/config` annotation rolls the pod; else `kubectl rollout restart deploy/openproject` |
 
 ## Recovery: stuck/corrupted helm release
 
