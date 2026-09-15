@@ -22,9 +22,18 @@ spec:
     metadata:
       labels:
         {{- include "openproject.selectorLabels" . | nindent 8 }}
+      annotations:
+        # Roll the pod when the ConfigMap changes — otherwise env updates (e.g.
+        # OPENPROJECT_ATTACHMENT_MAX_SIZE) never reach the running pod, since a
+        # ConfigMap change alone does not alter the Deployment spec.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
     spec:
       {{- with .Values.nodeSelector }}
       nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:

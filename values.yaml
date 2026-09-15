@@ -27,12 +27,27 @@ replicaCount: 1
 nodeSelector:
   kubernetes.io/hostname: pool-f971mwbjk-372vs6
 
+# Tolerate the node's memory-pressure taint. This deployment is pinned to a
+# single node (RWO PVC), so if that node comes under transient memory pressure
+# and gets tainted, the pod becomes unschedulable and the site goes fully down.
+# Tolerating the taint lets it (re)schedule once pressure has eased. NOTE: the
+# real fix for the underlying pressure is to right-size this pod's memory
+# (limit is 8Gi on an 8GB node) — see the `resources` block.
+tolerations:
+  - key: node.kubernetes.io/memory-pressure
+    operator: Exists
+    effect: NoSchedule
+
 openproject:
   # Public host served by the Ingress.
   hostName: project.glia.org
   edition: standard
   # Attachments live on the assets PVC.
   attachmentsStoragePath: /var/openproject/assets/files
+  # Max attachment size in KB (OpenProject rejects anything larger). The image
+  # default is 5120 KB (5 MB). 102400 KB = 100 MB. Must be <= the ingress
+  # proxy-body-size above.
+  attachmentMaxSize: "102400"
   # Preserve the previous Docker deployment's cache setting. NOTE: set to
   # "memcache" historically but no memcache server is deployed, so the cache
   # effectively no-ops / falls back. Switch to "file_store" (the upstream
@@ -80,6 +95,12 @@ ingress:
     # (where no cert exists yet) and fail. OpenProject still enforces HTTPS at
     # the application layer when X-Forwarded-Proto is set by the proxy/LB.
     nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    # Allow large attachment uploads. ingress-nginx defaults client_max_body_size
+    # to 1m, which silently caps uploads at ~1 MB (the ingress returns 413).
+    # Keep this >= the OpenProject attachmentMaxSize below.
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    # Give slow, large uploads time to complete (default read timeout is 60s).
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
   host: project.glia.org
   tls:
     enabled: true
