@@ -11,10 +11,11 @@ hard-won specifics of this setup that are not obvious from the chart alone.
   `openproject-meeting_markdown_export` plugin; rails 8.1.3, hocuspocus v4.2.0).
 - Deployed in namespace `openproject` on DOKS cluster **`k8s-glia1`**
   (kubeconfig context `do-tor1-k8s-glia1`).
-- Pod healthy at `replicas=1`, `strategy: Recreate`, pinned to node
-  `pool-f971mwbjk-372vs6` with a memory-pressure **toleration** (rule 11).
-- Memory: request 1Gi / limit **8Gi** (node is only 8GB — see rule 5); puma
-  workers=1, GoodJob threads=5.
+- Pod healthy at `replicas=1`, `strategy: Recreate`, running on its **own
+  dedicated node** — selected by label `glia.workload=openproject`, whose taint
+  keeps every other workload off it (see "Dedicated node" below).
+- Memory: request 1Gi / limit **8Gi**; puma workers=1, GoodJob threads=5.
+  Steady state ≈ **3.6 GB** (3 Rails processes: puma master + worker + GoodJob).
 - Attachments up to **100 MB** (ingress `proxy-body-size: 100m` + OpenProject
   `attachment_max_size=102400` KB — rule 12).
 - TLS via cert-manager `letsencrypt-prod`, cert valid (renews automatically).
@@ -41,14 +42,39 @@ The all-in-one image runs **puma + GoodJob (20 threads) + hocuspocus + memcached
 2. **17.6+ aborts on the default `SECRET_KEY_BASE`.** The image ships `SECRET_KEY_BASE=OVERWRITE_ME`; OpenProject 17.6.0 refuses to boot if it's still that value. Set **both** `OPENPROJECT_SECRET_KEY_BASE` **and** the raw `SECRET_KEY_BASE` from the Secret (the check reads the raw one). Both already wired in `templates/deployment.yaml`.
 3. **Probes must send the Host header.** OpenProject validates the HTTP Host (from `OPENPROJECT_HOST__NAME`); a kubelet probe to the pod IP gets HTTP 400. `readinessProbe`/`livenessProbe` use `httpHeaders: [{name: Host, value: project.glia.org}]`.
 4. **Disable ingress ssl-redirect.** ingress-nginx's default ssl-redirect 308's the cert-manager HTTP-01 challenge (which arrives over plain HTTP) → TLS never issues. `nginx.ingress.kubernetes.io/ssl-redirect: "false"` (OpenProject still forces HTTPS at the app layer).
-5. **Memory is the tightest constraint.** The all-in-one is memory-hungry (2Gi ⇒ OOMKilled). The limit is currently **8Gi** on an 8GB node, which overcommits the node and makes this pod the prime **eviction** victim (see rule 11). Puma workers=1 / GoodJob threads=5 (in `values.yaml`) trim the footprint. Right-sizing the limit is the real fix.
-6. **Use Deployment `strategy: Recreate`.** Single replica + RWO PVC: RollingUpdate tries two pods on the pinned node ⇒ `Insufficient memory` / Multi-Attach. Recreate kills the old pod first.
+5. **Memory is the tightest constraint.** The all-in-one is memory-hungry; steady state ≈ 3.6 GB (3 Rails processes). It now runs on a **dedicated node** (rule 11) so the 8Gi limit is honorable. Puma workers=1 / GoodJob threads=5 trim the footprint.
+6. **Use Deployment `strategy: Recreate`.** Single replica + RWO PVC: RollingUpdate tries two pods at once ⇒ resource contention / Multi-Attach. Recreate kills the old pod first, then starts the new one (brief downtime).
 7. **Pin the image tag + converge on the upstream lockfile.** `FROM openproject/openproject:<ver>` (pinned; the `:17` tag is moving). Do NOT ship a `Gemfile.lock` — `bundle install` converges on the image's own lockfile so rails stays at the OpenProject-supported version.
 8. **Keep `.helmignore`.** Helm has no default ignore; without it helm packages `.git/` and fails ("chart file … larger than 5242880") if any git object exceeds 5 MB.
 9. **No concurrent helm operations.** Concurrent deploys (CI + manual, or multiple pushes) corrupt the release ("another operation is in progress" / pending-rollback). `deploy.yml` has a `concurrency` group; never run a local `helm` command while CI is deploying.
 10. **Re-pushing the same tag won't re-pull.** With `IfNotPresent`, the node caches by tag. Either use a unique tag per build or `imagePullPolicy: Always` (currently `Always`).
-11. **Tolerate the memory-pressure taint.** This deployment is pinned to one node (RWO PVC). When that overcommitted node comes under memory pressure, kubelet taints it `node.kubernetes.io/memory-pressure` and the pod becomes **unschedulable → full outage**. The chart now tolerates that taint (`tolerations:` in `values.yaml`) so it can reschedule once pressure eases. The root fix is right-sizing memory (rule 5) — the node's pods' memory *limits* are overcommitted ~5x.
+11. **OpenProject runs on its own dedicated node.** The pod selects node label `glia.workload=openproject` and tolerates the matching taint; that taint keeps **all other workloads off** the node (only DaemonSets like cilium/csi/kube-proxy remain). This is why a small instance gets the whole 8 GB. The label+taint live on the **node/pool**, not the chart — if the node is ever replaced you must re-apply them (see "Dedicated node" below). The chart also keeps a `node.kubernetes.io/memory-pressure` toleration as a safety net.
 12. **Attachment uploads are capped at two layers.** ingress-nginx `proxy-body-size` (**defaults to `1m`** — the usual "~1 MB" culprit) and OpenProject `attachment_max_size` (KB; image default 5120 = 5 MB). Both are currently **100 MB** (`100m` / `OPENPROJECT_ATTACHMENT_MAX_SIZE=102400`). A ConfigMap-only change reaches a running pod only via the `checksum/config` rollout annotation.
+
+## Dedicated node (OpenProject's own node)
+
+OpenProject runs on a **dedicated node** so it gets the whole machine and nothing
+else competes for RAM. Mechanism: **label + taint** on the node, matching
+`nodeSelector` + `toleration` in the chart.
+
+```bash
+# 1. grow the pool (or add a pool), then dedicate the node:
+kubectl label node <node> glia.workload=openproject
+kubectl taint node <node> glia.workload=openproject:NoSchedule
+# 2. the chart selects that label and tolerates the taint — just deploy:
+helm upgrade --install openproject . -n openproject      # or push to main
+```
+
+- The taint keeps normal workloads off the node. DaemonSets still run there
+  (cilium, csi-do-node, kube-proxy, node-exporter, do-node-agent ≈ 300–400 MB).
+- The assets PVC is **region-scoped** (`region In [tor1]`), so it follows the pod
+  onto the new node. `Recreate` = a single mount, so the move is safe (a transient
+  `Multi-Attach` error during detach/attach is normal and resolves on its own).
+- Moving nodes costs ~3–5 min downtime (Recreate + volume reattach + Rails boot).
+- **Fragile bit:** the label/taint live on the *node*, not the chart. If the node
+  is recycled you must re-apply them — or better, move them onto a **dedicated
+  node pool** so they survive:
+  `doctl kubernetes cluster node-pool create k8s-glia1 --name openproject --size s-4vcpu-8gb --count 1 --label glia.workload=openproject --taint "glia.workload=openproject:NoSchedule"`
 
 ## Upgrading OpenProject
 
