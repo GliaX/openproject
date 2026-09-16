@@ -21,19 +21,21 @@ replicaCount: 1
 # assets PVC only after switching attachments storage to a shared (RWX) backend.
 
 # Pod placement: the assets PVC is ReadWriteOnce (DigitalOcean block storage),
-# so it can attach to a single node. Pin the pod to that node and keep
-# replicaCount=1 to avoid Multi-Attach errors during rollouts (same lesson as
-# GliaX/helm-erpnext). Switch the PVC to RWX to lift this.
+# so it can attach to a single node; keep replicaCount=1 to avoid Multi-Attach.
+# OpenProject runs on its OWN dedicated node (labelled `glia.workload=openproject`
+# + tainted so nothing else schedules there). We select by that label — NOT by
+# hostname — so the config survives node replacement. The PVC is region-scoped
+# (`region In [tor1]`), so it follows the pod onto the dedicated node.
 nodeSelector:
-  kubernetes.io/hostname: pool-f971mwbjk-372vs6
+  glia.workload: openproject
 
-# Tolerate the node's memory-pressure taint. This deployment is pinned to a
-# single node (RWO PVC), so if that node comes under transient memory pressure
-# and gets tainted, the pod becomes unschedulable and the site goes fully down.
-# Tolerating the taint lets it (re)schedule once pressure has eased. NOTE: the
-# real fix for the underlying pressure is to right-size this pod's memory
-# (limit is 8Gi on an 8GB node) — see the `resources` block.
 tolerations:
+  # Tolerate the dedicated-node taint so OpenProject may schedule onto its node.
+  - key: glia.workload
+    operator: Equal
+    value: openproject
+    effect: NoSchedule
+  # Safety net: tolerate transient memory-pressure taints too.
   - key: node.kubernetes.io/memory-pressure
     operator: Exists
     effect: NoSchedule
